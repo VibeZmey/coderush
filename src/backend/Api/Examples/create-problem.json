@@ -1,0 +1,22 @@
+{
+  "key": "sum-two-numbers",
+  "title": "Сумма двух чисел",
+  "descriptionMarkdown": "Прочитайте два целых числа и выведите **их сумму**.",
+  "inputDescriptionMarkdown": "Два целых числа в одной строке.",
+  "outputDescriptionMarkdown": "Одно целое число — сумма.",
+  "difficulty": "Easy",
+  "publish": true,
+  "cpuTimeLimitSeconds": 2,
+  "wallTimeLimitSeconds": 10,
+  "memoryLimitKilobytes": 128000,
+  "outputLimitKilobytes": 1024,
+  "languages": [
+    { "programmingLanguageId": 71, "template": "a, b = map(int, input().split())\n" },
+    { "programmingLanguageId": 54, "template": "#include <iostream>\nint main() {\n    // Your solution\n}\n" },
+    { "programmingLanguageId": 63, "template": "const fs = require('fs');\nconst input = fs.readFileSync(0, 'utf8');\n" }
+  ],
+  "testCases": [
+    { "input": "2 3\n", "expectedOutput": "5\n", "isSample": true },
+    { "input": "-10 4\n", "expectedOutput": "-6\n", "isSample": false }
+  ]
+}

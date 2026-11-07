@@ -1,0 +1,13 @@
+{
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning"
+    }
+  },
+  "AllowedHosts": "*",
+  "Judge0": {
+    "BaseUrl": "http://localhost:2358/",
+    "ProcessingTimeoutSeconds": 180
+  }
+}

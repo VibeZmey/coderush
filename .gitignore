@@ -1,0 +1,47 @@
+# Local settings and credentials
+.env
+.env.*
+!.env.example
+*.local
+*.local.*
+!*.example
+*.pem
+*.key
+*.pfx
+*.p12
+localhost.crt
+secrets.json
+secrets.dev.yaml
+
+# Local copies of configuration templates
+/src/docker-compose.yml
+/src/docker-compose.override.yml
+/src/docker-compose.override.yaml
+/src/judge0.conf
+/src/backend/Api/appsettings*.json
+/src/backend/Api/Properties/launchSettings.json
+/src/backend/Api/Dockerfile
+/src/frontend/Dockerfile
+/src/frontend/nginx.conf
+/src/frontend/vite.config.ts
+/src/frontend/tsconfig.json
+
+# Build output and dependencies
+[Bb]in/
+[Oo]bj/
+node_modules/
+dist/
+coverage/
+TestResults/
+*.tsbuildinfo
+*.log
+
+# IDE and local work files
+.idea/
+.vs/
+.vscode/
+*.user
+*.suo
+.DS_Store
+Thumbs.db
+/.design-work/

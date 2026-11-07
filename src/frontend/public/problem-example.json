@@ -1,0 +1,18 @@
+{
+  "key": "sum-two-numbers",
+  "title": "Сумма двух чисел",
+  "descriptionMarkdown": "Прочитайте два целых числа и выведите их сумму.",
+  "inputDescriptionMarkdown": "Два целых числа, разделённых пробелом.",
+  "outputDescriptionMarkdown": "Одно число — сумма входных чисел.",
+  "difficulty": "Easy",
+  "publish": false,
+  "cpuTimeLimitSeconds": 2,
+  "wallTimeLimitSeconds": 10,
+  "memoryLimitKilobytes": 128000,
+  "outputLimitKilobytes": 1024,
+  "languages": [{ "programmingLanguageId": 71, "template": "a, b = map(int, input().split())\n" }],
+  "testCases": [
+    { "input": "2 3\n", "expectedOutput": "5\n", "isSample": true },
+    { "input": "-10 4\n", "expectedOutput": "-6\n", "isSample": false }
+  ]
+}
