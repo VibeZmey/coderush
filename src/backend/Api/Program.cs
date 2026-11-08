@@ -1,4 +1,6 @@
 using Api.Endpoints;
+using Api.Profile;
+using Microsoft.AspNetCore.RateLimiting;
 using Api.Authorization;
 using Api.Security;
 using Application;
@@ -12,6 +14,12 @@ builder.Services.AddOpenApi();
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddApiAuthorization();
+builder.Services.AddSingleton<ProfileMediaStorage>();
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddConcurrencyLimiter(ProfileMediaEndpoints.UploadPolicy, limiter => limiter.PermitLimit = 2);
+});
 
 var app = builder.Build();
 
@@ -46,12 +54,16 @@ if (!builder.Configuration.GetValue<bool>("Security:HttpsTerminatedByProxy"))
 app.UseBrowserRequestSecurity();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
+app.MapProfileMediaEndpoints();
+app.MapProfiles();
 app.MapAuthEndpoints();
 app.MapMatchEndpoints();
 app.MapDuelEndpoints();
 app.MapRunCodeEndpoints();
 app.MapSubmissionEndpoints();
 app.MapProblemEndpoints();
+app.MapPracticeEndpoints();
 
 app.Run();
 

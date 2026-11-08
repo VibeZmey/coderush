@@ -28,7 +28,7 @@ public sealed class SubmissionService(AppDbContext db) : ISubmissionService
         var now = DateTimeOffset.UtcNow;
         if (problem.Match.Status != MatchStatus.InProgress || problem.Match.FinishedAt is not null ||
             problem.Status != MatchProblemStatus.Active || problem.ClosedAt is not null ||
-            problem.StartedAt is null || problem.StartedAt > now || problem.SubmissionDeadlineAt is null || problem.SubmissionDeadlineAt <= now)
+            problem.StartedAt is null || problem.StartedAt > now || !problem.IsSubmissionOpen(now))
             return new(SubmitCodeOutcome.InvalidState);
         var version = await db.ProblemVersions.Include(x => x.Languages).ThenInclude(x => x.ProgrammingLanguage)
             .Include(x => x.TestCases).AsSplitQuery().SingleAsync(x => x.Id == problem.ProblemVersionId, ct);

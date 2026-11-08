@@ -30,6 +30,9 @@ public sealed class MatchProblem : Entity
     public ICollection<CodeDraft> Drafts { get; set; } = new List<CodeDraft>();
     public ICollection<CodeRun> CodeRuns { get; set; } = new List<CodeRun>();
 
+    public bool IsSubmissionOpen(DateTimeOffset now) =>
+        Match is PracticeMatch || SubmissionDeadlineAt > now;
+
     public void Activate(DateTimeOffset now, int durationSeconds)
     {
         if (Status != MatchProblemStatus.NotStarted)

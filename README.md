@@ -18,7 +18,17 @@ Get-ChildItem -Recurse -File -Filter '*.example' |
       Copy-Item -LiteralPath $_.FullName -Destination $target
     }
   }
+# Заполните MINIO_ROOT_PASSWORD и MINIO_PROFILE_SECRET_KEY в src/.env
+# разными случайными значениями перед первым запуском.
 docker compose up -d --build
 ```
 
 Откройте [https://localhost:8443](https://localhost:8443). Для локального HTTPS используется самоподписанный сертификат.
+
+## Изображения профиля
+
+Compose использует сборку MinIO от Coollabs с фиксированным тегом релиза.
+
+Владелец аккаунта может загрузить аватар и фон в своём профиле. Поддерживаются статичные JPEG, PNG и WebP до 5 МиБ. Сервер сохраняет обработанные изображения в закрытом бакете MinIO. Данные переживают пересоздание контейнера благодаря тому `minio_data`.
+
+Настройки MinIO находятся в `src/.env`. Если локальные файлы уже существуют, перенесите блок `MINIO_*` из `src/.env.example` и обновите `src/docker-compose.yml` по шаблону. Для генерации каждого пароля можно использовать `[Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::GetBytes(24))` в PowerShell 7.

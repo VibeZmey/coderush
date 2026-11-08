@@ -35,7 +35,7 @@ public sealed class RequestValidationFilter<TRequest> : IEndpointFilter where TR
                 {
                     if (item is null)
                         throw new ValidationException($"{property.Name} must not contain null items.");
-                    ValidateRequest(item);
+                    if (item is not string) ValidateRequest(item);
                 }
             }
             else if (property.PropertyType.IsClass)

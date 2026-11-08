@@ -21,6 +21,7 @@ public sealed class ProblemManagementRepository(AppDbContext context) : IProblem
             var pattern = $"%{escaped}%";
             query = query.Where(v => EF.Functions.ILike(v.Title, pattern, "\\") || EF.Functions.ILike(v.Problem.Key, pattern, "\\"));
         }
+        if (search.IsPractice is { } isPractice) query = query.Where(v => v.Problem.IsPractice == isPractice);
         if (search.Difficulty is { } difficulty) query = query.Where(v => v.Difficulty == difficulty);
         if (search.Status is { } status) query = query.Where(v => v.Status == status);
         var total = await query.CountAsync(cancellationToken);
@@ -35,7 +36,7 @@ public sealed class ProblemManagementRepository(AppDbContext context) : IProblem
         };
         var items = await ordered.ThenBy(v => v.Id).Skip((search.Page - 1) * search.PageSize).Take(search.PageSize)
             .Select(v => new ProblemSummary(v.ProblemId, v.Problem.Key, v.Id, v.VersionNumber, v.Title,
-                v.Difficulty, v.Status, v.TestCases.Count, v.Languages.Count, v.CreatedAt))
+                v.Difficulty, v.Status, v.TestCases.Count, v.Languages.Count, v.CreatedAt, v.Problem.IsPractice, v.Topics))
             .ToArrayAsync(cancellationToken);
         return new(items, total, search.Page, search.PageSize);
     }
@@ -46,7 +47,7 @@ public sealed class ProblemManagementRepository(AppDbContext context) : IProblem
             .Include(v => v.Languages).Include(v => v.TestCases).AsSplitQuery().SingleOrDefaultAsync(cancellationToken);
         if (version is null) return null;
         return new(new ProblemSummary(id, version.Problem.Key, version.Id, version.VersionNumber, version.Title,
-                version.Difficulty, version.Status, version.TestCases.Count, version.Languages.Count, version.CreatedAt),
+                version.Difficulty, version.Status, version.TestCases.Count, version.Languages.Count, version.CreatedAt, version.Problem.IsPractice, version.Topics),
             version.DescriptionMarkdown, version.InputDescriptionMarkdown, version.OutputDescriptionMarkdown,
             version.ConstraintsMarkdown, version.ExplanationMarkdown, version.CpuTimeLimitSeconds,
             version.WallTimeLimitSeconds, version.MemoryLimitKilobytes, version.OutputLimitKilobytes,

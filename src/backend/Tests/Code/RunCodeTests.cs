@@ -97,6 +97,21 @@ public sealed class RunCodeTests
     }
 
     [Fact]
+    public async Task PracticeTaskAllowsRunsWithoutDeadlineOnlyForItsOwner()
+    {
+        var problem = ActiveProblem();
+        problem.Match = new PracticeMatch { UserId = "player", Status = MatchStatus.InProgress };
+        problem.SubmissionDeadlineAt = null;
+        var repository = new RecordingRepository(problem);
+        var handler = new RunCodeHandler(repository);
+        var command = Command(problem);
+
+        Assert.Equal(RunCodeOutcome.NotFound, (await handler.HandleAsync(command with { UserId = "outsider" })).Outcome);
+        Assert.Equal(RunCodeOutcome.Accepted, (await handler.HandleAsync(command)).Outcome);
+        Assert.Single(repository.Runs);
+    }
+
+    [Fact]
     public async Task ExpiredTaskRejectsRun()
     {
         var problem = ActiveProblem();

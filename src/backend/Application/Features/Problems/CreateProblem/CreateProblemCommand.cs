@@ -18,7 +18,9 @@ public sealed record CreateProblemCommand(
     int MemoryLimitKilobytes,
     int OutputLimitKilobytes,
     IReadOnlyList<ProblemLanguageSettings> Languages,
-    IReadOnlyList<ProblemTestCaseData> TestCases);
+    IReadOnlyList<ProblemTestCaseData> TestCases,
+    bool IsPractice = false,
+    string[]? Topics = null);
 
 public sealed record ProblemLanguageSettings(
     int ProgrammingLanguageId,

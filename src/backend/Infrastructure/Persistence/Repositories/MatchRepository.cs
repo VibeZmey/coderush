@@ -32,7 +32,7 @@ public sealed class MatchRepository(AppDbContext context) : IMatchRepository
 
     public async Task<IReadOnlyList<Guid>> SelectProblemVersionsAsync(ProblemDifficulty difficulty, int count) =>
         await context.ProblemVersions.AsNoTracking()
-            .Where(version => version.Status == PublicationStatus.Published && !version.Problem.IsArchived &&
+            .Where(version => version.Status == PublicationStatus.Published && !version.Problem.IsArchived && !version.Problem.IsPractice &&
                 version.Difficulty == difficulty && version.Languages.Any(language => language.ProgrammingLanguage.IsEnabled) &&
                 !context.ProblemVersions.Any(newer => newer.ProblemId == version.ProblemId &&
                     newer.Status == PublicationStatus.Published && newer.VersionNumber > version.VersionNumber))

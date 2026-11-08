@@ -28,9 +28,16 @@ public class AppDbContext : IdentityDbContext<User>
     {
     }
 
+    public IQueryable<string> AdminUserIds() =>
+        from membership in UserRoles
+        join role in Roles on membership.RoleId equals role.Id
+        where role.Name == Application.Common.Constants.UserRoles.Admin
+        select membership.UserId;
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
+        builder.Entity<User>().HasIndex(x => x.NormalizedEmail).IsUnique();
         builder.ApplyConfigurationsFromAssembly(typeof(AppDbContext).Assembly);
     }
 }

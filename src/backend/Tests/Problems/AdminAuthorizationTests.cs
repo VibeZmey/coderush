@@ -3,6 +3,8 @@ using Api.Authorization;
 using Api.Endpoints;
 using Application;
 using Application.Common.Constants;
+using Application.Features.Problems.ManageProblems;
+using Infrastructure.Persistence.Repositories;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
@@ -44,6 +46,7 @@ public sealed class AdminAuthorizationTests
             EnvironmentName = "Production", ContentRootPath = AppContext.BaseDirectory
         });
         builder.Services.AddApplication();
+        builder.Services.AddScoped<IProblemManagementRepository, ProblemManagementRepository>();
         builder.Services.AddApiAuthorization();
         await using var app = builder.Build();
         app.MapProblemEndpoints();

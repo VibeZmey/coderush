@@ -13,6 +13,7 @@ public sealed class ProblemVersion : Entity
     public string? OutputDescriptionMarkdown { get; set; }
     public string? ConstraintsMarkdown { get; set; }
     public string? ExplanationMarkdown { get; set; }
+    public string[] Topics { get; init; } = [];
     public ProblemDifficulty Difficulty { get; set; } = ProblemDifficulty.Unspecified;
     public PublicationStatus Status { get; set; } = PublicationStatus.Draft;
     public DateTimeOffset? PublishedAt { get; set; }

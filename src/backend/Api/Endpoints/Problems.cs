@@ -43,7 +43,7 @@ public static class Problems
         => Results.Ok(await repository.SearchAsync(new ProblemSearch(request.Search,
             request.Difficulty is { Length: > 0 } d ? Enum.Parse<ProblemDifficulty>(d) : null,
             request.Status is { Length: > 0 } s ? Enum.Parse<PublicationStatus>(s) : null,
-            request.Sort, request.Page, request.PageSize), cancellationToken));
+            request.Sort, request.Page, request.PageSize, request.IsPractice), cancellationToken));
 
     private static async Task<IResult> GetAsync(Guid id, IProblemManagementRepository repository, CancellationToken cancellationToken)
         => await repository.GetAsync(id, cancellationToken) is { } problem ? Results.Ok(problem) : Results.NotFound();
@@ -71,6 +71,7 @@ public static class Problems
     private static IResult WriteFailure(ProblemWriteOutcome outcome) => outcome switch
     {
         ProblemWriteOutcome.NotFound => Results.NotFound(),
+        ProblemWriteOutcome.PoolChange => Results.Conflict(new { message = "Пул опубликованных и сохранённых задач изменить нельзя." }),
         ProblemWriteOutcome.DuplicateKey => Results.Conflict(new { message = "Задача с таким ключом уже существует или повторяется в файле. Изменения не сохранены." }),
         ProblemWriteOutcome.Conflict => Results.Conflict(new { message = "Задача была изменена другим запросом. Обновите её и повторите изменения." }),
         ProblemWriteOutcome.LanguageUnavailable => Results.Problem(statusCode: 400, detail: "Выберите существующие включённые языки без повторений."),
@@ -83,24 +84,15 @@ public static class Problems
         request.Difficulty, request.Publish, request.CpuTimeLimitSeconds, request.WallTimeLimitSeconds,
         request.MemoryLimitKilobytes, request.OutputLimitKilobytes,
         request.Languages.Select(l => new ProblemLanguageSettings(l.ProgrammingLanguageId, l.Template)).ToArray(),
-        request.TestCases.Select(t => new ProblemTestCaseData(t.Input, t.ExpectedOutput, t.IsSample)).ToArray());
+        request.TestCases.Select(t => new ProblemTestCaseData(t.Input, t.ExpectedOutput, t.IsSample)).ToArray(),
+        request.IsPractice, request.Topics?.Select(topic => topic.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToArray());
 
     private static async Task<IResult> CreateProblemAsync(
         ClaimsPrincipal principal,
         CreateProblemRequest request,
         IHandler<CreateProblemCommand, CreateProblemResult> handler)
     {
-        var command = new CreateProblemCommand(
-            principal.FindFirstValue(ClaimTypes.NameIdentifier)!,
-            request.Key, request.Title, request.DescriptionMarkdown,
-            request.InputDescriptionMarkdown, request.OutputDescriptionMarkdown,
-            request.ConstraintsMarkdown, request.ExplanationMarkdown, request.Difficulty, request.Publish,
-            request.CpuTimeLimitSeconds, request.WallTimeLimitSeconds,
-            request.MemoryLimitKilobytes, request.OutputLimitKilobytes,
-            request.Languages.Select(language => new ProblemLanguageSettings(
-                language.ProgrammingLanguageId, language.Template)).ToArray(),
-            request.TestCases.Select(test => new ProblemTestCaseData(
-                test.Input, test.ExpectedOutput, test.IsSample)).ToArray());
+        var command = ToCommand(request, principal.FindFirstValue(ClaimTypes.NameIdentifier)!);
         var result = await handler.HandleAsync(command);
 
         return result.Outcome switch

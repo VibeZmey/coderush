@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Application.Common.Constants;
 using Application.Common.Interfaces;
 using Api.Contracts.Auth;
 using Api.Validation;
@@ -57,6 +58,9 @@ public static class Auth
         var userId = principal.FindFirstValue(ClaimTypes.NameIdentifier)!;
 
         var account = await handler.HandleAsync(new GetAccountQuery(userId));
-        return account is null ? Results.Unauthorized() : Results.Ok(account);
+        return account is null ? Results.Unauthorized() : Results.Ok(new
+        {
+            account.Id, account.Email, account.UserName, IsAdmin = principal.IsInRole(UserRoles.Admin)
+        });
     }
 }

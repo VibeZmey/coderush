@@ -5,12 +5,12 @@ using Application.Features.Problems.CreateProblem;
 namespace Application.Features.Problems.ManageProblems;
 
 public sealed record ProblemSearch(string Search, ProblemDifficulty? Difficulty, PublicationStatus? Status,
-    string Sort, int Page, int PageSize);
+    string Sort, int Page, int PageSize, bool? IsPractice = null);
 
 public sealed record ProblemSummary(Guid Id, string Key, Guid VersionId, int VersionNumber, string Title,
     [property: JsonConverter(typeof(JsonStringEnumConverter<ProblemDifficulty>))] ProblemDifficulty Difficulty,
     [property: JsonConverter(typeof(JsonStringEnumConverter<PublicationStatus>))] PublicationStatus Status,
-    int TestCount, int LanguageCount, DateTimeOffset CreatedAt);
+    int TestCount, int LanguageCount, DateTimeOffset CreatedAt, bool IsPractice, string[] Topics);
 
 public sealed record ProblemPage(IReadOnlyList<ProblemSummary> Items, int Total, int Page, int PageSize);
 public sealed record ProblemDetails(ProblemSummary Summary, string DescriptionMarkdown,
@@ -19,7 +19,7 @@ public sealed record ProblemDetails(ProblemSummary Summary, string DescriptionMa
     int MemoryLimitKilobytes, int OutputLimitKilobytes,
     IReadOnlyList<ProblemLanguageSettings> Languages, IReadOnlyList<ProblemTestCaseData> TestCases);
 
-public enum ProblemWriteOutcome { Saved, NotFound, Conflict, DuplicateKey, LanguageUnavailable }
+public enum ProblemWriteOutcome { Saved, NotFound, Conflict, PoolChange, DuplicateKey, LanguageUnavailable }
 public sealed record ProblemWriteResult(ProblemWriteOutcome Outcome, CreatedProblem? Problem = null);
 public sealed record ProblemImportResult(ProblemWriteOutcome Outcome, IReadOnlyList<CreatedProblem>? Problems = null);
 
@@ -39,6 +39,7 @@ public sealed class ProblemManagementHandler(
     {
         var problem = await repository.GetForUpdateAsync(id, cancellationToken);
         if (problem is null) return new(ProblemWriteOutcome.NotFound);
+        if (problem.IsPractice != command.IsPractice) return new(ProblemWriteOutcome.PoolChange);
         var current = problem.Versions.MaxBy(v => v.VersionNumber)!;
         if (current.Id != baseVersionId) return new(ProblemWriteOutcome.Conflict);
         if (!await LanguagesAvailable(command)) return new(ProblemWriteOutcome.LanguageUnavailable);
@@ -58,7 +59,7 @@ public sealed class ProblemManagementHandler(
             if (!await LanguagesAvailable(command)) return new(ProblemWriteOutcome.LanguageUnavailable);
         var problems = commands.Select(command =>
         {
-            var problem = new Problem { Key = command.Key, CreatedByUserId = command.UserId };
+            var problem = new Problem { Key = command.Key, CreatedByUserId = command.UserId, IsPractice = command.IsPractice };
             problem.Versions.Add(BuildVersion(problem.Id, 1, command));
             return problem;
         }).ToArray();
@@ -84,6 +85,7 @@ public sealed class ProblemManagementHandler(
             Title = command.Title, DescriptionMarkdown = command.DescriptionMarkdown,
             InputDescriptionMarkdown = command.InputDescriptionMarkdown, OutputDescriptionMarkdown = command.OutputDescriptionMarkdown,
             ConstraintsMarkdown = command.ConstraintsMarkdown, ExplanationMarkdown = command.ExplanationMarkdown,
+            Topics = command.Topics ?? [],
             Difficulty = command.Difficulty, Status = command.Publish ? PublicationStatus.Published : PublicationStatus.Draft,
             PublishedAt = command.Publish ? DateTimeOffset.UtcNow : null,
             CpuTimeLimitSeconds = command.CpuTimeLimitSeconds, WallTimeLimitSeconds = command.WallTimeLimitSeconds,

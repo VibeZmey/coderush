@@ -19,7 +19,7 @@ public sealed class MatchConfiguration : IEntityTypeConfiguration<Match>
         builder.HasKey(match => match.Id);
         builder.Property(match => match.UserId).IsRequired();
         builder.HasDiscriminator<MatchType>("Type").HasValue<TrainingMatch>(MatchType.Training)
-            .HasValue<DuelMatch>(MatchType.Duel);
+            .HasValue<DuelMatch>(MatchType.Duel).HasValue<PracticeMatch>(MatchType.Practice);
         builder.HasOne<User>().WithMany().HasForeignKey(match => match.UserId).OnDelete(DeleteBehavior.Restrict);
         builder.HasIndex(match => new { match.UserId, match.CreatedAt });
 

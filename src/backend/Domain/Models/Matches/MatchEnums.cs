@@ -38,6 +38,7 @@ public enum MatchType
 {
     Training = 0,
     Duel = 1,
+    Practice = 2
 }
 
 public enum MatchFinishReason

@@ -15,11 +15,11 @@ public sealed record DuelProblemView(Guid Id, string Title, string Description, 
 public sealed record DuelMatchView(Guid Id, bool Ranked, string Status, DateTimeOffset? StartsAt, DateTimeOffset? Deadline,
     string? Opponent, int? OpponentRating, string? OpponentRank,
     DuelProblemView? Problem, DuelAttemptView[] OwnAttempts, DuelAttemptView[] OpponentAttempts, string? Result, int Delta,
-    DateTimeOffset? AcceptBy, bool Accepted, bool OpponentAccepted);
+    DateTimeOffset? AcceptBy, bool Accepted, bool OpponentAccepted, bool OpponentIsAdmin = false);
 public sealed record DuelState(DateTimeOffset ServerTime, bool Searching, string? SearchMessage, DuelRatingView Rating, DuelMatchView? Match);
 public sealed record DuelActionResult(bool Success, string? Message = null);
 public sealed record DuelCodeView(string SourceCode, string Language, bool Solved);
-public sealed record DuelProfileView(string UserName, DuelRatingView Rating);
+public sealed record DuelProfileView(string UserName, DuelRatingView Rating, string Id);
 
 public sealed class DuelService(AppDbContext db)
 {
@@ -230,6 +230,12 @@ public sealed class DuelService(AppDbContext db)
             return new(true);
         }, ct);
 
+    public async Task<DuelMatchView?> ResultAsync(Guid id, string userId, CancellationToken ct)
+    {
+        var match = await CompletedMatchAsync(id, userId, ct);
+        return match is null ? null : await ViewAsync(match, userId, DateTimeOffset.UtcNow, ct);
+    }
+
     public async Task<DuelCodeView?> OpponentCodeAsync(Guid id, string userId, CancellationToken ct)
     {
         var match = await CompletedMatchAsync(id, userId, ct);
@@ -255,6 +261,13 @@ public sealed class DuelService(AppDbContext db)
         return draft ?? latest?.Code;
     }
 
+    public Task<string?> OpponentIdAsync(Guid id, string userId, CancellationToken ct) =>
+        Matches.AsNoTracking()
+            .Where(x => x.Id == id && x.OpponentId != null &&
+                (x.UserId == userId || x.OpponentId == userId))
+            .Select(x => x.UserId == userId ? x.OpponentId : x.UserId)
+            .SingleOrDefaultAsync(ct);
+
     public async Task<DuelProfileView?> OpponentProfileAsync(Guid id, string userId, CancellationToken ct)
     {
         var match = await CompletedMatchAsync(id, userId, ct);
@@ -262,7 +275,7 @@ public sealed class DuelService(AppDbContext db)
             return null;
         var opponent = match.UserId == userId ? match.OpponentId! : match.UserId;
         var name = await db.Users.Where(x => x.Id == opponent).Select(x => x.UserName).SingleAsync(ct);
-        return new(name ?? "Соперник", await RatingAsync(opponent, ct));
+        return new(name ?? "Соперник", await RatingAsync(opponent, ct), opponent);
     }
 
     private Task<DuelMatch?> CompletedMatchAsync(Guid id, string userId, CancellationToken ct) =>
@@ -326,7 +339,7 @@ public sealed class DuelService(AppDbContext db)
 
     private Task<Guid?> PickProblemAsync(ProblemDifficulty difficulty, CancellationToken ct) =>
         db.ProblemVersions.Where(x => x.Difficulty == difficulty && x.Status == PublicationStatus.Published &&
-            !x.Problem.IsArchived && x.TestCases.Any() && x.Languages.Any(l => l.ProgrammingLanguage.IsEnabled) &&
+            !x.Problem.IsArchived && !x.Problem.IsPractice && x.TestCases.Any() && x.Languages.Any(l => l.ProgrammingLanguage.IsEnabled) &&
             !db.ProblemVersions.Any(newer => newer.ProblemId == x.ProblemId &&
                 newer.Status == PublicationStatus.Published && newer.VersionNumber > x.VersionNumber))
             .OrderBy(_ => EF.Functions.Random()).Select(x => (Guid?)x.Id).FirstOrDefaultAsync(ct);
@@ -343,7 +356,9 @@ public sealed class DuelService(AppDbContext db)
         var first = match.UserId == userId;
         var opponentId = first ? match.OpponentId : match.UserId;
         var opponentRating = first ? match.SecondRating : match.FirstRating;
-        var opponent = opponentId is null ? null : await db.Users.Where(x => x.Id == opponentId).Select(x => x.UserName).SingleAsync(ct);
+        var adminIds = db.AdminUserIds();
+        var opponent = opponentId is null ? null : await db.Users.Where(x => x.Id == opponentId)
+            .Select(x => new { x.UserName, IsAdmin = adminIds.Contains(x.Id) }).SingleAsync(ct);
         var status = match.Status.ToString();
         DuelProblemView? problem = null;
         DuelAttemptView[] own = [], other = [];
@@ -375,9 +390,9 @@ public sealed class DuelService(AppDbContext db)
         }
 
         return new(match.Id, match.Ranked, status, match.StartedAt, match.StartedAt?.AddSeconds(match.DurationSeconds),
-            opponent, opponentId is null ? null : opponentRating, opponentId is null ? null : DuelRules.GetRank(opponentRating).Rank.ToString(),
+            opponent?.UserName, opponentId is null ? null : opponentRating, opponentId is null ? null : DuelRules.GetRank(opponentRating).Rank.ToString(),
             problem, own, other, ResultFor(match, userId), DeltaFor(match, userId),
-            match.AcceptBy, first ? match.FirstAccepted : match.SecondAccepted, first ? match.SecondAccepted : match.FirstAccepted);
+            match.AcceptBy, first ? match.FirstAccepted : match.SecondAccepted, first ? match.SecondAccepted : match.FirstAccepted, opponent?.IsAdmin == true);
     }
 
     private static int DeltaFor(DuelMatch match, string userId) => match.UserId == userId ? match.FirstDelta : match.SecondDelta;

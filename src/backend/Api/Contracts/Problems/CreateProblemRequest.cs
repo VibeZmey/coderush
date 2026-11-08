@@ -6,7 +6,7 @@ using Domain.Models.Problems;
 namespace Api.Contracts.Problems;
 
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed class CreateProblemRequest
+public sealed class CreateProblemRequest : IValidatableObject
 {
     [Required, StringLength(128), RegularExpression("[a-z0-9]+(?:-[a-z0-9]+)*")]
     public required string Key { get; init; }
@@ -33,6 +33,17 @@ public sealed class CreateProblemRequest
     public required ProblemDifficulty Difficulty { get; init; }
 
     public bool Publish { get; init; }
+    public bool IsPractice { get; init; }
+    public string[]? Topics { get; init; }
+
+    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+    {
+        if (IsPractice && (Topics is null || Topics.Length == 0))
+            yield return new("Укажите хотя бы одну тему для каталога.", [nameof(Topics)]);
+        else if (Topics is { } topics && (topics.Length > 10 ||
+            topics.Any(topic => string.IsNullOrWhiteSpace(topic) || topic.Trim().Length > 40 || topic.Any(char.IsControl))))
+            yield return new("Укажите до 10 тем длиной от 1 до 40 символов.", [nameof(Topics)]);
+    }
 
     [Range(double.Epsilon, double.MaxValue)]
     public double CpuTimeLimitSeconds { get; init; } = 2;

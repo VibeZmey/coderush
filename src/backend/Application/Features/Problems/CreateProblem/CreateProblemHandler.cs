@@ -14,7 +14,7 @@ public sealed class CreateProblemHandler(IProblemRepository problems)
         if (enabledLanguages.Count != languageIds.Length)
             return new(CreateProblemOutcome.LanguageUnavailable);
 
-        var problem = new Problem { Key = request.Key, CreatedByUserId = request.UserId };
+        var problem = new Problem { Key = request.Key, CreatedByUserId = request.UserId, IsPractice = request.IsPractice };
         var version = new ProblemVersion
         {
             ProblemId = problem.Id,
@@ -26,6 +26,7 @@ public sealed class CreateProblemHandler(IProblemRepository problems)
             OutputDescriptionMarkdown = request.OutputDescriptionMarkdown,
             ConstraintsMarkdown = request.ConstraintsMarkdown,
             ExplanationMarkdown = request.ExplanationMarkdown,
+            Topics = request.Topics ?? [],
             Difficulty = request.Difficulty,
             CpuTimeLimitSeconds = request.CpuTimeLimitSeconds,
             WallTimeLimitSeconds = request.WallTimeLimitSeconds,

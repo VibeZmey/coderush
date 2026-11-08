@@ -17,7 +17,7 @@ public sealed class RunCodeHandler(ICodeRunRepository runs) : IHandler<RunCodeCo
         if (problem.Match.Status != MatchStatus.InProgress || problem.Match.FinishedAt is not null ||
             problem.Status != MatchProblemStatus.Active || problem.ClosedAt is not null ||
             problem.StartedAt is null || problem.StartedAt > now ||
-            problem.SubmissionDeadlineAt is null || problem.SubmissionDeadlineAt <= now)
+            !problem.IsSubmissionOpen(now))
             return new(RunCodeOutcome.InvalidState);
 
         var language = problem.ProblemVersion.Languages.SingleOrDefault(

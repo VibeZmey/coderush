@@ -26,7 +26,7 @@ function boolean(value: unknown, path: string): boolean {
   return value;
 }
 
-export function parseProblemFile(json: string): ProblemInput[] {
+export function parseProblemFile(json: string, expectedPool?: boolean): ProblemInput[] {
   let data: unknown;
   try { data = JSON.parse(json.replace(/^\uFEFF/, '')); } catch { throw new Error('Не удалось прочитать JSON. Проверьте кавычки, запятые и скобки.'); }
   let list: unknown[];
@@ -36,10 +36,10 @@ export function parseProblemFile(json: string): ProblemInput[] {
     if ('problems' in root) { keys(root, ['problems'], 'JSON'); if (!Array.isArray(root.problems)) throw new Error('problems: ожидается массив задач.'); list = root.problems; }
     else list = [root];
   }
-  if (list.length < 1 || list.length > 50) throw new Error('В файле должно быть от 1 до 50 задач.');
+  if (list.length < 1 || list.length > 60) throw new Error('В файле должно быть от 1 до 60 задач.');
   const parsed = list.map((value, index): ProblemInput => {
     const path = `Задача ${index + 1}`; const p = object(value, path);
-    keys(p, ['key', 'title', 'descriptionMarkdown', 'inputDescriptionMarkdown', 'outputDescriptionMarkdown', 'constraintsMarkdown', 'explanationMarkdown', 'difficulty', 'publish', 'cpuTimeLimitSeconds', 'wallTimeLimitSeconds', 'memoryLimitKilobytes', 'outputLimitKilobytes', 'languages', 'testCases'], path);
+    keys(p, ['key', 'title', 'descriptionMarkdown', 'inputDescriptionMarkdown', 'outputDescriptionMarkdown', 'constraintsMarkdown', 'explanationMarkdown', 'difficulty', 'publish', 'isPractice', 'topics', 'cpuTimeLimitSeconds', 'wallTimeLimitSeconds', 'memoryLimitKilobytes', 'outputLimitKilobytes', 'languages', 'testCases'], path);
     const key = text(p.key, `${path}.key`, 128, true);
     if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(key)) throw new Error(`${path}.key: используйте строчные латинские буквы, цифры и дефисы.`);
     const title = text(p.title, `${path}.title`, 1024, true);
@@ -53,7 +53,16 @@ export function parseProblemFile(json: string): ProblemInput[] {
       return { programmingLanguageId: number(l.programmingLanguageId, 0, `${path}.languages[${i}].programmingLanguageId`, true), template: text(l.template, `${path}.languages[${i}].template`, 65536) };
     });
     if (new Set(languages.map(l => l.programmingLanguageId)).size !== languages.length) throw new Error(`${path}: языки не должны повторяться.`);
-    return { key, title, difficulty: p.difficulty as ProblemInput['difficulty'], publish: boolean(p.publish, `${path}.publish`),
+    const isPractice = p.isPractice === undefined && expectedPool !== undefined
+      ? expectedPool : boolean(p.isPractice, `${path}.isPractice`);
+    if (expectedPool !== undefined && isPractice !== expectedPool)
+      throw new Error(`${path}: пул в файле отличается от выбранной категории. Откройте нужную категорию и повторите импорт.`);
+    const topics = p.topics === undefined ? [] : p.topics;
+    if (!Array.isArray(topics) || topics.length > 10 || (isPractice && topics.length === 0) ||
+        topics.some(topic => typeof topic !== 'string' || !topic.trim() || topic.trim().length > 40)) {
+      throw new Error(`${path}.topics: укажите до 10 тем длиной от 1 до 40 символов и хотя бы одну тему для каталога.`);
+    }
+    return { key, title, isPractice, topics, difficulty: p.difficulty as ProblemInput['difficulty'], publish: boolean(p.publish, `${path}.publish`),
       descriptionMarkdown: text(p.descriptionMarkdown, `${path}.descriptionMarkdown`, 1048576, true),
       inputDescriptionMarkdown: text(p.inputDescriptionMarkdown, `${path}.inputDescriptionMarkdown`, 1048576),
       outputDescriptionMarkdown: text(p.outputDescriptionMarkdown, `${path}.outputDescriptionMarkdown`, 1048576),

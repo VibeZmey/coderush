@@ -31,6 +31,10 @@ services:
       Security__HttpsTerminatedByProxy: "true"
       ConnectionStrings__DefaultConnection: ${ConnectionStrings__DefaultConnection:?Set ConnectionStrings__DefaultConnection in .env}
       Judge0__BaseUrl: http://judge0-server:2358
+      ProfileMedia__Endpoint: http://minio:9000
+      ProfileMedia__Bucket: ${MINIO_PROFILE_BUCKET:?Set MINIO_PROFILE_BUCKET in .env}
+      ProfileMedia__AccessKey: ${MINIO_PROFILE_ACCESS_KEY:?Set MINIO_PROFILE_ACCESS_KEY in .env}
+      ProfileMedia__SecretKey: ${MINIO_PROFILE_SECRET_KEY:?Set MINIO_PROFILE_SECRET_KEY in .env}
     ports:
       - "127.0.0.1:${API_PORT:?Set API_PORT in .env}:8080"
     depends_on:
@@ -38,8 +42,47 @@ services:
         condition: service_healthy
       judge0-server:
         condition: service_started
+      minio-init:
+        condition: service_completed_successfully
     networks:
       - app
+      - storage
+
+  minio:
+    image: ghcr.io/coollabsio/minio:RELEASE.2025-10-15T17-29-55Z
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?Set MINIO_ROOT_USER in .env}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD in .env}
+      MINIO_BROWSER: "off"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+    networks:
+      - storage
+
+  minio-init:
+    image: ghcr.io/coollabsio/minio:RELEASE.2025-10-15T17-29-55Z
+    entrypoint: ["/bin/sh", "/init-minio.sh"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?Set MINIO_ROOT_USER in .env}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD in .env}
+      MINIO_PROFILE_BUCKET: ${MINIO_PROFILE_BUCKET:?Set MINIO_PROFILE_BUCKET in .env}
+      MINIO_PROFILE_ACCESS_KEY: ${MINIO_PROFILE_ACCESS_KEY:?Set MINIO_PROFILE_ACCESS_KEY in .env}
+      MINIO_PROFILE_SECRET_KEY: ${MINIO_PROFILE_SECRET_KEY:?Set MINIO_PROFILE_SECRET_KEY in .env}
+    volumes:
+      - ./minio-init.sh:/init-minio.sh:ro
+    depends_on:
+      minio:
+        condition: service_healthy
+    networks:
+      - storage
+
 
   postgres:
     image: postgres:17-alpine
@@ -137,6 +180,7 @@ services:
 
 volumes:
   frontend_certs:
+  minio_data:
   postgres_data:
   judge0_postgres_data:
   judge0_redis_data:
@@ -144,3 +188,5 @@ volumes:
 networks:
   app:
     driver: bridge
+  storage:
+    internal: true

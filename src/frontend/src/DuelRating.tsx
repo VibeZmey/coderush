@@ -1,9 +1,7 @@
-import { useEffect, useState, type CSSProperties } from 'react';
-import { request } from './api';
-import { Notice } from './components';
+import type { CSSProperties } from 'react';
 import './duels.css';
 
-type Rank = 'Intern' | 'Junior' | 'Middle' | 'Senior';
+export type Rank = 'Intern' | 'Junior' | 'Middle' | 'Senior';
 export type DuelResult = 'Win' | 'Loss' | 'Draw' | 'JudgeUnavailable';
 export type DuelRating = {
   rating: number; rank: Rank; nextThreshold: number | null;
@@ -21,17 +19,17 @@ export function DuelRankBadge({ rank, rating }: { rank: Rank; rating: number }) 
   return <span className="duel-rank-badge" data-rank={rank}>{rank} · {ratingFormat.format(rating)}</span>;
 }
 
-export function DuelRatingCard({ rating, compact = false }: { rating: DuelRating; compact?: boolean }) {
+export function DuelRatingCard({ rating, compact = false, label = 'Рейтинг дуэлей' }: { rating: DuelRating; compact?: boolean; label?: string }) {
   const { rank, nextThreshold } = rating;
   const floor = nextThreshold === null ? 1600 : nextThreshold - 200;
   const progress = nextThreshold === null ? 100 : Math.max(0, (rating.rating - floor) / (nextThreshold - floor) * 100);
   const nextRank = rankOrder[rankOrder.indexOf(rank) + 1];
-  return <section className="panel duel-rating" data-rank={rank} aria-label="Рейтинг дуэлей">
+  return <section className="panel duel-rating" data-rank={rank} aria-label={label}>
     <div className="duel-rating-ring" style={{ '--rank-progress': progress + '%' } as CSSProperties} aria-hidden="true">
       <span>{rank.slice(0, 1)}</span>
     </div>
     <div className="duel-rating-content">
-      <div className="eyebrow">РЕЙТИНГ ДУЭЛЕЙ</div>
+      <div className="eyebrow">{label}</div>
       <div className="duel-rating-line">
         <strong>{ratingFormat.format(rating.rating)}</strong>
         <span className="duel-rank-name">{rank}</span>
@@ -49,18 +47,4 @@ export function DuelRatingCard({ rating, compact = false }: { rating: DuelRating
       </>)}
     </div>
   </section>;
-}
-
-export function ProfileDuelRating({ accountId }: { accountId: string }) {
-  const [rating, setRating] = useState<DuelRating>();
-  const [error, setError] = useState('');
-  useEffect(() => {
-    let active = true;
-    request<DuelRating>('/duels/rating').then(value => { if (active) setRating(value); })
-      .catch(error => { if (active) setError(error.message); });
-    return () => { active = false; };
-  }, [accountId]);
-
-  if (error) return <Notice error>{error}</Notice>;
-  return rating ? <DuelRatingCard rating={rating} compact /> : <p className="muted" role="status">Загружаем рейтинг дуэлей…</p>;
 }

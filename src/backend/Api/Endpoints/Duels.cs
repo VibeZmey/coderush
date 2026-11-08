@@ -1,3 +1,4 @@
+using Api.Profile;
 using System.Security.Claims;
 using System.ComponentModel.DataAnnotations;
 using Api.Validation;
@@ -24,8 +25,15 @@ public static class Duels
         group.MapPut("/{id:guid}/draft", async (Guid id, DuelDraftRequest request, ClaimsPrincipal user, DuelService service, CancellationToken ct) =>
             Response(await service.SaveDraftAsync(id, UserId(user), request.ProgrammingLanguageId, request.SourceCode, ct)))
             .AddEndpointFilter<RequestValidationFilter<DuelDraftRequest>>();
+        group.MapGet("/{id:guid}/result", async (Guid id, ClaimsPrincipal user, DuelService service, CancellationToken ct) =>
+            await service.ResultAsync(id, UserId(user), ct) is { } result ? Results.Ok(result) : Results.NotFound());
         group.MapGet("/{id:guid}/opponent-code", async (Guid id, ClaimsPrincipal user, DuelService service, CancellationToken ct) =>
             await service.OpponentCodeAsync(id, UserId(user), ct) is { } code ? Results.Ok(code) : Results.NotFound());
+        group.MapGet("/{id:guid}/opponent-avatar", async (Guid id, ClaimsPrincipal user, DuelService service,
+            HttpResponse response, ProfileMediaStorage storage, CancellationToken ct) =>
+            await service.OpponentIdAsync(id, UserId(user), ct) is { } opponent
+                ? await ProfileMediaEndpoints.ReadAsync(opponent, "avatar", response, storage, ct)
+                : Results.NotFound());
         group.MapGet("/{id:guid}/opponent-profile", async (Guid id, ClaimsPrincipal user, DuelService service, CancellationToken ct) =>
             await service.OpponentProfileAsync(id, UserId(user), ct) is { } profile ? Results.Ok(profile) : Results.NotFound());
         group.MapPost("/custom", async (DuelLobbyRequest request, ClaimsPrincipal user, DuelService service, CancellationToken ct) =>

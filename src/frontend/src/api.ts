@@ -1,4 +1,4 @@
-export type Account = { id: string; email: string | null; userName: string | null };
+export type Account = { id: string; email: string | null; userName: string | null; isAdmin?: boolean };
 export type MatchResult = { id: string; status: string; createdAt?: string; startedAt?: string };
 export type RunResult = { id: string; status: 'Pending' | 'Queued' | 'Running' | 'Completed' | 'Failed' | 'Cancelled'; createdAt: string;
   completedAt?: string | null; failureCode?: string | null; result?: {
@@ -15,12 +15,17 @@ export type SubmissionResult = {
 export type TrainingProblem = { id: string; position: number; status: string; outcome: string | null; title: string; descriptionMarkdown: string; inputDescriptionMarkdown: string | null; outputDescriptionMarkdown: string | null; constraintsMarkdown: string | null; explanationMarkdown: string | null; cpuTimeLimitSeconds: number; memoryLimitKilobytes: number; startedAt: string | null; submissionDeadlineAt: string | null; languages: TrainingLanguage[]; samples: { input: string; expectedOutput: string }[] };
 export type TrainingTaskResult = { id: string; position: number; title: string; status: string; outcome: string | null; startedAt: string | null; closedAt: string | null; spentSeconds: number; runCount: number };
 export type TrainingMatch = { id: string; createdAt: string; mode: string; status: string; difficulty: Difficulty; count: number; timePerProblemSeconds: number; serverTime: string; startedAt: string | null; finishedAt: string | null; completedAt: string | null; finishReason: string | null; currentProblem: TrainingProblem | null; result: { solved: number; timedOut: number; skipped: number; abandoned: number; started: number; notStarted: number; workSeconds: number; problems: TrainingTaskResult[] } };
+export type PracticeProblem = { id: string; key: string; title: string; difficulty: Difficulty; topics: string[]; solved: boolean };
+export type PracticeWorkspace = Pick<PracticeProblem, 'difficulty' | 'topics' | 'solved'> & {
+  problem: TrainingProblem; latestSubmissionId: string | null;
+};
 export type ProblemResult = { id: string; versionId: string; versionNumber: number; status: string; createdAt: string };
-export type ProblemSummary = { id: string; key: string; versionId: string; versionNumber: number; title: string; difficulty: Difficulty; status: 'Draft' | 'Published' | 'Retired'; testCount: number; languageCount: number; createdAt: string };
+export type ProblemSummary = { id: string; key: string; versionId: string; versionNumber: number; title: string; difficulty: Difficulty; status: 'Draft' | 'Published' | 'Retired'; testCount: number; languageCount: number; createdAt: string; isPractice: boolean; topics: string[] };
 export type ProblemPage = { items: ProblemSummary[]; total: number; page: number; pageSize: number };
-export type ProblemDetails = Omit<ProblemInput, 'key' | 'title' | 'difficulty' | 'publish'> & { summary: ProblemSummary };
+export type ProblemDetails = Omit<ProblemInput, 'key' | 'title' | 'difficulty' | 'publish' | 'isPractice' | 'topics'> & { summary: ProblemSummary };
 export function problemToInput(problem: ProblemDetails): ProblemInput {
   return { key: problem.summary.key, title: problem.summary.title, difficulty: problem.summary.difficulty, publish: problem.summary.status === 'Published',
+    isPractice: problem.summary.isPractice, topics: problem.summary.topics,
     descriptionMarkdown: problem.descriptionMarkdown, inputDescriptionMarkdown: problem.inputDescriptionMarkdown ?? '',
     outputDescriptionMarkdown: problem.outputDescriptionMarkdown ?? '', constraintsMarkdown: problem.constraintsMarkdown ?? '', explanationMarkdown: problem.explanationMarkdown ?? '',
     cpuTimeLimitSeconds: problem.cpuTimeLimitSeconds, wallTimeLimitSeconds: problem.wallTimeLimitSeconds, memoryLimitKilobytes: problem.memoryLimitKilobytes, outputLimitKilobytes: problem.outputLimitKilobytes,
@@ -28,7 +33,7 @@ export function problemToInput(problem: ProblemDetails): ProblemInput {
 }
 export type Difficulty = 'Easy' | 'Medium' | 'Hard';
 export type ProblemInput = {
-  key: string; title: string; descriptionMarkdown: string; difficulty: Difficulty; publish: boolean;
+  key: string; title: string; descriptionMarkdown: string; difficulty: Difficulty; publish: boolean; isPractice?: boolean; topics?: string[];
   inputDescriptionMarkdown: string; outputDescriptionMarkdown: string; constraintsMarkdown: string; explanationMarkdown: string;
   cpuTimeLimitSeconds: number; wallTimeLimitSeconds: number; memoryLimitKilobytes: number; outputLimitKilobytes: number;
   languages: { programmingLanguageId: number; template: string }[];
@@ -92,6 +97,11 @@ export const api = {
   logout: () => request<void>('/auth/logout', {}),
   createMatch: (count: number, difficulty: Difficulty, timePerProblemSeconds: number) => request<MatchResult>('/matches/training', { count, difficulty, timePerProblemSeconds }),
   startMatch: (matchId: string) => request<MatchResult>('/matches/start', { matchId }),
+  practiceCatalog: () => request<PracticeProblem[]>('/practice'),
+  previewPractice: (id: string) => request<PracticeWorkspace>(`/practice/${encodeURIComponent(id)}`),
+  openPractice: (id: string) => request<PracticeWorkspace>(`/practice/${encodeURIComponent(id)}/open`, {}),
+  savePracticeDraft: (matchProblemId: string, programmingLanguageId: number, sourceCode: string, standardInput: string) =>
+    request<void>(`/practice/drafts/${encodeURIComponent(matchProblemId)}`, { matchProblemId, programmingLanguageId, sourceCode, standardInput }, 'PUT'),
   trainingMatches: () => request<TrainingMatch[]>('/matches'),
   trainingMatch: (id: string) => request<TrainingMatch>(`/matches/${encodeURIComponent(id)}`),
   nextTrainingProblem: (id: string) => request<TrainingMatch>(`/matches/${encodeURIComponent(id)}/next`, {}),

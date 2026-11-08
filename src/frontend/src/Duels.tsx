@@ -1,11 +1,13 @@
+import Avatar from './Avatar';
 import { useEffect, useRef, useState, type FormEvent, type CSSProperties } from 'react';
 import { api, ApiError, request, validateCode, type Account, type Difficulty, type RunResult, type SubmissionResult } from './api';
 import { difficultyNames } from './catalog';
-import { Button, Field, Modal, Notice } from './components';
+import { AdminTag, Button, Field, Modal, Notice } from './components';
 import { DuelRankBadge, DuelRatingCard, ratingDelta, resultNames, type DuelRating, type DuelResult } from './DuelRating';
-import { readSession, removeSession, writeSession } from './sessionStorage';
+import { readSession, writeSession } from './sessionStorage';
 import { formatDuration, remainingSeconds } from './trainingTime';
-import { ArrowRight, Check, Clock3, Code2, Play, Trophy } from './icons';
+import { ArrowRight, Check, CircleHelp, Clock3, Code2, Play, Trophy } from './icons';
+import { MatchHistory } from './Profile';
 import WorkbenchPanes, { type WorkbenchPane, type WorkbenchTab } from './WorkbenchPanes';
 
 const difficulties: Difficulty[] = ['Easy', 'Medium', 'Hard'];
@@ -20,7 +22,7 @@ type Problem = {
 };
 type Duel = {
   id: string; ranked: boolean; status: 'Created' | 'AwaitingAcceptance' | 'Countdown' | 'InProgress' | 'Finalizing' | 'Completed';
-  startsAt: string | null; deadline: string | null; opponent: string | null; opponentRating: number | null;
+  startsAt: string | null; deadline: string | null; opponent: string | null; opponentIsAdmin: boolean; opponentRating: number | null;
   opponentRank: DuelRating['rank'] | null; problem: Problem | null;
   ownAttempts: Attempt[]; opponentAttempts: Attempt[]; result: DuelResult | null; delta: number;
   acceptBy: string | null; accepted: boolean; opponentAccepted: boolean;
@@ -32,7 +34,6 @@ const verdictNames: Record<string, string> = {
   MemoryLimitExceeded: 'Превышен лимит памяти', OutputLimitExceeded: 'Превышен лимит вывода',
   CompilationError: 'Ошибка компиляции', RuntimeError: 'Ошибка выполнения',
 };
-const initials = (name: string) => name.slice(0, 2).toUpperCase();
 const attemptLabel = (attempt?: Attempt) => !attempt ? 'Ещё без отправок' : isChecking(attempt)
   ? 'Решение проверяется' : verdictNames[attempt.verdict ?? ''] ?? 'Сбой проверки';
 
@@ -51,6 +52,8 @@ export default function Duels({ account, authorized, theme }: {
   const [clock, setClock] = useState(Date.now());
   const [invite, setInvite] = useState(readInvite);
   const [copied, setCopied] = useState(false);
+  const [showRules, setShowRules] = useState(false);
+  const [historyMatchId, setHistoryMatchId] = useState<string>();
   const match = state?.match;
   const terminal = match?.status === 'Completed';
   const invitePending = !!invite && match?.id !== invite && (!match || terminal) && !state?.searching;
@@ -146,9 +149,15 @@ export default function Duels({ account, authorized, theme }: {
 
   const confirming = visible && account && (match.status === 'AwaitingAcceptance' || match.status === 'Countdown');
   return <>
-    <div className="page-heading"><div><span className="eyebrow">СОРЕВНОВАНИЕ 1 НА 1</span><h1>Дуэли</h1>
-      <p>Одна задача на двоих. Поднимай рейтинг, побеждая соперников своего уровня.</p></div></div>
-    {state && <DuelRatingCard rating={state.rating} />}
+    <header className="panel duel-hero">
+      <div className="duel-hero-copy">
+        <span className="eyebrow">АРЕНА CODERUSH</span>
+        <h1>Дуэли</h1>
+        <Button variant="secondary" onClick={() => setShowRules(true)}><CircleHelp size={16} aria-hidden="true" /> Правила</Button>
+      </div>
+    </header>
+    {state && <DuelRatingCard rating={state.rating} label="Рейтинг" />}
+    {showRules && !confirming && !(visible && terminal) && <DuelRulesDialog onClose={() => setShowRules(false)} />}
     {pollError && <Notice error>{pollError}</Notice>}
     {error && <Notice error>{error}</Notice>}
     {account && !state && !pollError && <p className="muted" role="status">Загружаем дуэли…</p>}
@@ -156,9 +165,9 @@ export default function Duels({ account, authorized, theme }: {
       <div className="duel-confirmation" data-countdown={match.status === 'Countdown'}>
         <span className="eyebrow">{match.ranked ? 'РЕЙТИНГОВАЯ ДУЭЛЬ' : 'СВОЙ МАТЧ'} · 1 НА 1</span>
         <div className="duel-ready-players">
-          <ReadyPlayer name={account.userName ?? 'Ты'} ready={match.accepted || match.status === 'Countdown'} own />
+          <ReadyPlayer isAdmin={account.isAdmin} name={account.userName ?? 'Ты'} ready={match.accepted || match.status === 'Countdown'} own />
           <span className="duel-versus" aria-hidden="true">VS</span>
-          <ReadyPlayer name={match.opponent ?? 'Соперник'} ready={match.opponentAccepted || match.status === 'Countdown'} />
+          <ReadyPlayer isAdmin={match.opponentIsAdmin} matchId={match.id} name={match.opponent ?? 'Соперник'} ready={match.opponentAccepted || match.status === 'Countdown'} />
         </div>
         <div className="duel-confirmation-clock" style={{ '--duel-time': `${seconds / (match.status === 'Countdown' ? 5 : 30) * 100}%` } as CSSProperties}>
           <span>{match.status === 'Countdown' ? 'До старта' : 'До конца подтверждения'}</span>
@@ -185,17 +194,24 @@ export default function Duels({ account, authorized, theme }: {
         </div>}
       </section>
     </> : !confirming && <div className="duel-actions">
-      <section className="panel setup-panel"><h2>Рейтинговая игра</h2>
-        <p className="muted">Соперник с близким рейтингом. Сложность зависит от рейтинга пары. На задачу — 15 минут.</p>
-        {state?.searching ? <><p role="status">{state.searchMessage ?? 'Ищем соперника…'}</p>
+      <section className="panel setup-panel duel-mode duel-mode-ranked">
+        <div className="duel-mode-meta"><span className="duel-mode-icon"><Trophy size={22} aria-hidden="true" /></span>
+          <span><Clock3 size={14} aria-hidden="true" /> 15 минут</span></div>
+        <h2>Рейтинговая игра</h2>
+        <p className="muted">Соперник с близким рейтингом. Сложность зависит от рейтинга пары.</p>
+        {state?.searching ? <><p className="duel-search-status" role="status">{state.searchMessage ?? 'Ищем соперника…'}</p>
           <Button variant="secondary" busy={busy} onClick={() => void act('/duels/cancel')}>Отменить поиск</Button></>
-          : <Button busy={busy} disabled={!!account && !state} onClick={() => void act('/duels/search')}>Играть</Button>}
+          : <Button className="duel-search-button" busy={busy} disabled={!!account && !state} onClick={() => void act('/duels/search')}>Найти соперника</Button>}
       </section>
-      {invitePending && invite ? <section className="panel setup-panel"><h2>Приглашение в дуэль</h2>
+      {invitePending && invite ? <section className="panel setup-panel duel-mode">
+        <div className="duel-mode-meta"><span className="duel-mode-icon"><Code2 size={22} aria-hidden="true" /></span><span>По приглашению</span></div>
+        <h2>Приглашение в дуэль</h2>
         <p className="muted">После входа оба игрока подтверждают участие. Рейтинг в этом матче не меняется.</p>
         <Button busy={busy} onClick={() => void act('/duels/custom/' + encodeURIComponent(invite) + '/join')}>Присоединиться</Button>
-      </section> : <section className="panel setup-panel"><h2>Свой матч</h2>
-        <p className="muted">Пригласи друга по ссылке и сыграйте без изменения рейтинга.</p>
+      </section> : <section className="panel setup-panel duel-mode">
+        <div className="duel-mode-meta"><span className="duel-mode-icon"><Code2 size={22} aria-hidden="true" /></span><span>По приглашению</span></div>
+        <h2>Свой матч</h2>
+        <p className="muted">Пригласи друга по ссылке</p>
         <form className="form-stack" onSubmit={create}>
           <Field label="Сложность"><select value={difficulty} onChange={event => setDifficulty(event.target.value as Difficulty)}>
             {difficulties.map(value => <option key={value} value={value}>{difficultyNames[value]}</option>)}
@@ -206,15 +222,68 @@ export default function Duels({ account, authorized, theme }: {
         </form>
       </section>}
     </div>}
-    {terminal && !visible && !invitePending && !state?.searching && <Button variant="secondary" className="duel-reopen-result"
-      onClick={() => { removeSession(dismissedKey); setDismissed(null); }}>Итог последнего матча</Button>}
+    {accountId && <MatchHistory key={accountId} id={accountId} duelsOnly latestMatchId={terminal ? match.id : undefined}
+      onResult={game => setHistoryMatchId(game.id)} />}
+    {historyMatchId && !confirming && !(visible && terminal) &&
+      <HistoricalDuelResult key={historyMatchId} id={historyMatchId} onClose={() => setHistoryMatchId(undefined)} />}
   </>;
 }
 
-function ReadyPlayer({ name, ready, own = false }: { name: string; ready: boolean; own?: boolean }) {
+export function HistoricalDuelResult({ id, onClose }: { id: string; onClose: () => void }) {
+  const [match, setMatch] = useState<Duel>();
+  const [error, setError] = useState('');
+  useEffect(() => {
+    let active = true;
+    request<Duel>(`/duels/${encodeURIComponent(id)}/result`)
+      .then(value => { if (active) setMatch(value); })
+      .catch(() => { if (active) setError('Не удалось загрузить итог дуэли. Закрой окно и попробуй снова.'); });
+    return () => { active = false; };
+  }, [id]);
+
+  return match ? <DuelResultDialog match={match} onClose={onClose} /> :
+    <Modal title="Итог дуэли" className="duel-dialog" onClose={onClose}>
+      {error ? <Notice error>{error}</Notice> : <p role="status">Загружаем итог…</p>}
+    </Modal>;
+}
+
+function DuelRulesDialog({ onClose }: { onClose: () => void }) {
+  return <Modal title="Правила дуэлей" className="duel-dialog duel-rules-dialog" onClose={onClose}>
+    <div className="duel-rules">
+      <section>
+        <h3>Режимы и поиск соперника</h3>
+        <p>Рейтинговая дуэль длится 15 минут. Поиск выбирает игрока с ближайшим рейтингом в допустимом диапазоне. Сначала разница может быть до 100 очков. Каждые 15 секунд, которые оба игрока провели в очереди, добавляют по 50 очков к пределу, максимум до 500.</p>
+        <p>Сложность задачи определяется по среднему рейтингу пары. Ниже 1200 выпадает лёгкая задача, от 1200 до 1399 включительно средняя, от 1400 сложная. В своём матче создатель выбирает сложность и время от 1 до 60 минут, затем отправляет сопернику ссылку. Свои матчи проходят без изменения рейтинга.</p>
+      </section>
+      <section>
+        <h3>Подтверждение и старт</h3>
+        <p>У обоих игроков есть 30 секунд, чтобы принять матч. Если кто-то не подтвердит участие, матч отменяется. После двух подтверждений начинается отсчёт в 5 секунд. Оба игрока получают одну и ту же задачу.</p>
+      </section>
+      <section>
+        <h3>Отправка и проверка</h3>
+        <p>Для результата учитываются решения, отправленные с начала матча до истечения времени. Запуск кода помогает проверить решение, а в зачёт идёт отправка на проверку. Когда появляется первое принятое решение или заканчивается время, система ждёт завершения проверок, которые могут повлиять на результат. При сбое такой проверки рейтинг не меняется.</p>
+        <p>После завершения матча соперник сможет посмотреть твоё принятое решение или последний сохранённый код, если принятого решения нет.</p>
+      </section>
+      <section>
+        <h3>Кто побеждает</h3>
+        <ol>
+          <li>Если задачу решил один игрок, побеждает он. Если решили оба, выигрывает тот, кто раньше отправил принятое решение. При одинаковом времени отправки засчитывается ничья.</li>
+          <li>Если задачу не решил никто, сравнивается наибольшее число пройденных тестов за одну отправку.</li>
+          <li>Если оба прошли одинаковое ненулевое число тестов, побеждает тот, кому потребовалось меньше отправок до первой попытки с таким результатом. Если и этот показатель совпадает или никто не прошёл ни одного теста, засчитывается ничья.</li>
+        </ol>
+      </section>
+      <section>
+        <h3>Рейтинг и ранги</h3>
+        <p>Стартовый рейтинг составляет 1000 очков. Ранг Intern действует до 1199 очков включительно, Junior начинается с 1200, Middle с 1400, Senior с 1600.</p>
+        <p>Базовое изменение рейтинга составляет 25 очков, если задачу решил только победитель, 23, если решили оба, 21 за победу по числу тестов и 20 за победу по числу попыток. Из базы вычитается число отправок победителя до первой принятой или первой лучшей попытки. Итоговое изменение составляет минимум 18 очков. Победитель получает столько же очков, сколько теряет проигравший. При ничьей рейтинг не меняется.</p>
+      </section>
+    </div>
+  </Modal>;
+}
+
+function ReadyPlayer({ name, ready, matchId, own = false, isAdmin }: { isAdmin?: boolean; name: string; ready: boolean; matchId?: string; own?: boolean }) {
   return <div className="duel-ready-player" data-ready={ready}>
-    <span className="avatar" aria-hidden="true">{initials(name)}</span>
-    <strong>{name}</strong>
+    <span className="avatar" aria-hidden="true"><Avatar name={name} matchId={matchId} /></span>
+    <strong>{name}{isAdmin && <AdminTag />}</strong>
     <span className="duel-ready-state">{ready && <Check size={14} aria-hidden="true" />}{ready ? 'Принято' : own ? 'Твоё подтверждение' : 'Ожидает'}</span>
   </div>;
 }
@@ -240,46 +309,42 @@ function DuelResultDialog({ match, onClose }: { match: Duel; onClose: () => void
 
   return <Modal title="Итог дуэли" className="duel-dialog duel-result-dialog" onClose={onClose}>
     <div className="duel-result-summary" data-result={match.result ?? undefined}>
-      <Trophy size={24} aria-hidden="true" />
+      <span className="duel-result-emblem"><Trophy size={26} aria-hidden="true" /></span>
+      <span className="eyebrow">{match.ranked ? 'Рейтинговая дуэль' : 'Свой матч'}</span>
       <strong>{match.result ? resultNames[match.result] : 'Матч завершён'}</strong>
-      <span>{match.ranked ? ratingDelta(match.delta) + ' Elo' : 'Свой матч'}</span>
+      {match.ranked && <span className="duel-result-delta">{ratingDelta(match.delta)} Elo</span>}
       {match.problem && <p>{match.problem.title}</p>}
     </div>
     <div className="duel-result-players">
-      <div><strong>Ты</strong><span>{attemptLabel(match.ownAttempts[0])}</span></div>
-      <div><strong>{match.opponent ?? 'Соперник'}</strong><span>{attemptLabel(match.opponentAttempts[0])}</span></div>
+      <div><span className="avatar" aria-hidden="true"><Avatar name="Ты" /></span><strong>Ты</strong><span>{attemptLabel(match.ownAttempts[0])}</span></div>
+      <span className="duel-versus" aria-hidden="true">VS</span>
+      <div><span className="avatar" aria-hidden="true"><Avatar name={match.opponent ?? 'Соперник'} matchId={match.id} /></span>
+        <a href={'#opponent?match=' + encodeURIComponent(match.id)} onClick={onClose}>{match.opponent ?? 'Соперник'}{match.opponentIsAdmin && <AdminTag />}</a>
+        <span>{attemptLabel(match.opponentAttempts[0])}</span></div>
     </div>
     <div className="duel-result-actions">
       <Button variant="secondary" busy={busy} onClick={() => void toggleCode()}>
         <Code2 size={16} />{showCode ? 'Скрыть код' : 'Код соперника'}
       </Button>
-      <a className="button secondary" href={'#opponent?match=' + encodeURIComponent(match.id)} onClick={onClose}>
-        Профиль соперника <ArrowRight size={16} />
-      </a>
     </div>
     {showCode && (error ? <Notice error>{error}</Notice> : code === null
       ? <p className="muted">Соперник не сохранил код в этом матче.</p>
       : code && <section className="duel-result-code"><h3>{code.solved ? 'Зачтённое решение' : 'Последний сохранённый код'} · {code.language}</h3>
         <pre tabIndex={0}><code>{code.sourceCode}</code></pre></section>)}
-    <Button onClick={onClose}>К выбору матча</Button>
   </Modal>;
 }
 
 export function DuelOpponentProfile({ matchId }: { matchId: string }) {
-  const [profile, setProfile] = useState<{ userName: string; rating: DuelRating }>();
   const [error, setError] = useState('');
   useEffect(() => {
     let active = true;
-    request<{ userName: string; rating: DuelRating }>('/duels/' + encodeURIComponent(matchId) + '/opponent-profile')
-      .then(value => { if (active) setProfile(value); })
-      .catch(e => { if (active) setError(e.message); });
+    request<{ id: string }>('/duels/' + encodeURIComponent(matchId) + '/opponent-profile')
+      .then(value => { if (active) location.replace(`#profile?id=${encodeURIComponent(value.id)}`); })
+      .catch(() => { if (active) setError('Не удалось открыть профиль соперника.'); });
     return () => { active = false; };
   }, [matchId]);
   return <>
-    <div className="page-heading"><div>{profile && <div className="profile-avatar" aria-hidden="true">{initials(profile.userName)}</div>}
-      <span className="eyebrow">ПРОФИЛЬ СОПЕРНИКА</span>
-      <h1>{profile?.userName ?? 'Соперник'}</h1></div><a className="button secondary" href="#duels">К дуэлям</a></div>
-    {error ? <Notice error>{error}</Notice> : profile ? <DuelRatingCard rating={profile.rating} compact />
+    {error ? <><Notice error>{error}</Notice><a className="button secondary" href="#duels">К дуэлям</a></>
       : <p className="muted" role="status">Загружаем профиль…</p>}
   </>;
 }
@@ -415,7 +480,7 @@ function DuelWorkspace({ accountId, theme, match, problem, seconds, connectionEr
       <div className="workbench-management">
         <div className="duel-workbench-opponent">
           <span className="avatar duel-opponent-avatar" data-activity={opponentActivity} title={attemptLabel(opponentAttempt)} aria-hidden="true">
-            {initials(match.opponent ?? 'Соперник')}
+            <Avatar name={match.opponent ?? 'Соперник'} matchId={match.id} />
           </span>
           <span className="sr-only" role="status">{attemptLabel(opponentAttempt)}</span>
           <div className="duel-opponent-label"><span className="caption-4">Соперник</span>
